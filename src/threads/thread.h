@@ -93,6 +93,10 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    /*** wake time = start time + ticks.
+         need to be before magic because magic is used to detect stackoverflow ***/
+    ///int64_t waketime;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
