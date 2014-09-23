@@ -132,14 +132,6 @@ timer_sleep (int64_t ticks)
     enum intr_level old_level = intr_disable();                 /// disable the interrupt
     list_insert_ordered(&waitingList, &tt->e, waketime_less, NULL); /// put the struct into the waiting queue in order
     //list_push_back(&waitingList, &tt->e);
-
-    /*
-    struct list_elem *a;
-    ASSERT((a=list_end(&waitingList))!=NULL);
-    printf("Pass 1--\n");
-    ASSERT(&tt->e != NULL);
-    printf("Pass 2--\n");*/
-    //**WARNING: this push back uses THREAD's elem, which means it may share with sync variables
     thread_block();                                             /// put the current thread to sleep
     intr_set_level (old_level);
   }else
@@ -244,18 +236,22 @@ wakeup(void) {
         ///  alternatively, I can check only the front, and pop it.
         /// this will only delay them from waking up by ONE ticks (negligible)
         /**!@# PersonalNote: do not disable interrupt inside this interrupt. */
-      for (e = list_begin (&waitingList); e != list_end (&waitingList);
-           e = list_next (e))
-        {
-          struct timedThread *tt = list_entry (e, struct timedThread, e);
-          if (tt->waketime <= ticks) {
-                list_pop_front(&waitingList); ///need to pop the one i am going thru
-                printf("\nwaking up thread: %d \n", tt->t->tid);
+
+    if (!list_empty(&waitingList)) {
+      for (;;) {
+            struct list_elem *el = list_min(&waitingList, waketime_less, NULL);
+            struct timedThread *tt = list_entry(el, struct timedThread, e);
+            if (tt->waketime <= ticks) {
+                printf("unblocking thread %d for current tick: %d wakeup: %d\n", tt->t->tid, ticks, tt->waketime);
+                list_remove(el);
                 thread_unblock(tt->t);
-          } else {
-            break; /// breaks the loop because the list is ORDERED, no longer need to check
-          }
-        }
+            }else {
+                /** The minimum wake time of the list is larger than current ticks ==> no more threads to unblock*/
+                break;
+            }
+      }
+    }
+
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
