@@ -128,7 +128,7 @@ timer_sleep (int64_t ticks)
     tt = malloc(sizeof (struct timedThread)); /// allocate memory space
     tt->t = thread_current();
     tt->waketime = ticks + start;
-    printf("let's put thread: %d into sleep until waketime: %d\n", tt->t->tid, tt->waketime);
+    printf("BLOCK THREAD %d WAKETIME %d\n", tt->t->tid, tt->waketime);
     enum intr_level old_level = intr_disable();                 /// disable the interrupt
     list_insert_ordered(&waitingList, &tt->e, waketime_less, NULL); /// put the struct into the waiting queue in order
     //list_push_back(&waitingList, &tt->e);
@@ -237,20 +237,25 @@ wakeup(void) {
         /// this will only delay them from waking up by ONE ticks (negligible)
         /**!@# PersonalNote: do not disable interrupt inside this interrupt. */
 
-    if (!list_empty(&waitingList)) {
-      for (;;) {
-            struct list_elem *el = list_min(&waitingList, waketime_less, NULL);
-            struct timedThread *tt = list_entry(el, struct timedThread, e);
-            if (tt->waketime <= ticks) {
-                printf("unblocking thread %d for current tick: %d wakeup: %d\n", tt->t->tid, ticks, tt->waketime);
-                list_remove(el);
-                thread_unblock(tt->t);
-            }else {
-                /** The minimum wake time of the list is larger than current ticks ==> no more threads to unblock*/
-                break;
-            }
+
+  for (;;) {
+      if (list_empty(&waitingList)) {
+        break;
       }
-    }
+        struct list_elem *el = list_min(&waitingList, waketime_less, NULL);
+        struct timedThread *tt = list_entry(el, struct timedThread, e);
+        if (tt->waketime <= ticks) {
+            printf("unblock thread %d, current tick: %d, waketime: %d\n", tt->t->tid, ticks, tt->waketime);
+            list_remove(el);
+            thread_unblock(tt->t);
+            //free(tt);
+        }else {
+            /** The minimum wake time of the list is larger than current ticks ==> no more threads to unblock*/
+            break;
+        }
+
+  }
+
 
 }
 
