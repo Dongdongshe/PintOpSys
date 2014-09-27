@@ -108,11 +108,19 @@ waketime_less (const struct list_elem *_a,
     const struct timedThread *a = list_entry(_a, struct timedThread, e);
     const struct timedThread *b = list_entry(_b, struct timedThread, e);
     /// true if a<b else false. NOTE: this may have to contain priority in later implementation
-    if (a->waketime < b->waketime)
+    if (a->waketime < b->waketime) {
         return true;
-    else
+    }else if (a->waketime == b->waketime) {
+        /** there exist two threads such that it has the same waketime, but different priority
+            what you want is to put the higher priority in the BACK, so you need to return FALSE when a > b
+        */
+        if (a->t->priority > b->t->priority)
+            return false;
+        else
+            return true;
+    }else{
         return false;
-
+    }
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
@@ -245,7 +253,6 @@ wakeup(void) {
         struct list_elem *el = list_min(&waitingList, waketime_less, NULL);
         struct timedThread *tt = list_entry(el, struct timedThread, e);
         if (tt->waketime <= ticks) {
-            //printf("unblock thread %d, current tick: %d, waketime: %d\n", tt->t->tid, ticks, tt->waketime);
             list_remove(el);
             thread_unblock(tt->t);
             //free(tt);

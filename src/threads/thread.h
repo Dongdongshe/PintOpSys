@@ -92,6 +92,7 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    ///!@# Shared between thread and synch? then if other class uses it, would it corrupt?
 
     ///int64_t waketime;
 

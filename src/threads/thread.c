@@ -71,6 +71,25 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/** less function for the thread,
+    Compares the value of two list elements A and B, given
+    auxiliary data AUX.  Returns true if A is less than B, or
+    false if A is greater than or equal to B. */
+static bool
+priority_less (const struct list_elem *_a,
+             const struct list_elem *_b,
+             void *aux) {
+    /// Retreive struct thread
+    const struct thread *a = list_entry(_a, struct thread, elem);
+    const struct thread *b = list_entry(_b, struct thread, elem);
+    /// true if a<b else false.
+    if (a->priority < b->priority)
+        return true;
+    else
+        return false;
+
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -201,7 +220,11 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  return tid;
+    /**if created thread is higher than current thread, yield*/
+    if (thread_current()->priority < t->priority) {
+        thread_yield();
+    }
+  return tid; ///!@# but what will happen to this tid return??? thread_create not completed?
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -237,8 +260,10 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, priority_less, NULL);
+  /// push back is replaced
   t->status = THREAD_READY;
+  /// TODO: run highest priority, no yield nor schedule here, because they are blocked,
   intr_set_level (old_level);
 }
 
@@ -308,7 +333,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, priority_less, NULL);
+    /// pushback is replaced
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -334,8 +360,12 @@ thread_foreach (thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority)
-{
+{ /// TODO: check for the highest priority
   thread_current ()->priority = new_priority;
+  // if there exists higher priority than current thread, run the higher priority
+  if (new_priority < list_end(&ready_list)) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -466,7 +496,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
-  list_push_back (&all_list, &t->allelem);
+  list_insert_ordered (&all_list, &t->allelem, priority_less, NULL);
+  /// push back is replaced
   intr_set_level (old_level);
 }
 
@@ -494,7 +525,8 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_pop_back (&ready_list), struct thread, elem);
+    /// highest priority is at the back of list
 }
 
 /* Completes a thread switch by activating the new thread's page
