@@ -94,7 +94,6 @@ struct thread
     struct list_elem elem;              /* List element. */
     ///!@# Shared between thread and synch? then if other class uses it, would it corrupt?
 
-    ///int64_t waketime;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
