@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 
+#include "threads/synch.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -93,8 +95,10 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     ///!@# Shared between thread and synch? then if other class uses it, would it corrupt?
-
-
+    int originalPriority;               /** Enables to rollback to original priority */
+    struct lock *lock_wanted;
+    int donationLevel;                  /** Keeps track of donation level */
+    struct list holding_locks;          /** For donation return */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
