@@ -144,7 +144,6 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   /** TODO: Instead of popping front, we need to pop
   the one who has the highest priority
-  Note: even though thread_unblock will take care of priority from the ready list,
   it is important that sema->waiters have different list
   so it is necessary to iterate thru sema->waiters for highest priority
   */
@@ -160,6 +159,10 @@ sema_up (struct semaphore *sema)
   //printf("sema_up: by thread %s\n", thread_current()->name);
   sema->value++;
   intr_set_level (old_level);
+  /**if unblocked thread is higher than current thread, yield*/
+    if (thread_current()->priority < thread_get_maxReadyPriority()) {
+        thread_yield();
+    }
 }
 
 static void sema_test_helper (void *sema_);
@@ -384,12 +387,19 @@ lock_priorityReturn(struct lock *lock) {
 
                     if (!list_empty (&beneficiary->holding_locks)) {
                         struct semaphore semap = list_entry (list_front (&beneficiary->holding_locks), struct lock, elem)->semaphore;
-                        beneficiary->priority = list_entry (list_front (&semap.waiters), struct thread, elem)->priority;
-                        beneficiary->donationLevel--;
+                        struct thread *highestWaiting = list_entry (list_front (&semap.waiters), struct thread, elem);
+                        if (beneficiary->priority < highestWaiting->priority) {
+                            beneficiary->priority = highestWaiting->priority;
+                            beneficiary->donationLevel--;
+                        }else {
+                            // it has highest among all the threads, because of that, it's going to preempt the cpu
+                            beneficiary->donationLevel = 0;
+                        }
+
                     } else {
                         // beneficiary does not have anymore locks holding
                         beneficiary->priority = beneficiary->originalPriority;
-                        beneficiary->donationLevel --;
+                        beneficiary->donationLevel=0;
                     }
                 }
             }

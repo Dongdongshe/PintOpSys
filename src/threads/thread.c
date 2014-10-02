@@ -257,7 +257,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back(&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, highPriorityShiftsLeft, NULL);
   t->status = THREAD_READY;
   /// TODO: run highest priority, no yield nor schedule here, because they are blocked,
   intr_set_level (old_level);
@@ -365,6 +365,7 @@ thread_set_priority (int new_priority)
 
   // if there exists higher priority than current thread, run the higher priority
   if (!list_empty(&ready_list)) {
+      list_sort(&ready_list, highPriorityShiftsLeft, NULL);
       struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
       if (new_priority < t->priority) {
         thread_yield();
@@ -378,6 +379,17 @@ int
 thread_get_priority (void)
 {
   return thread_current ()->priority;
+}
+
+int
+thread_get_maxReadyPriority(void) {
+    if (!list_empty(&ready_list)) {
+        list_sort(&ready_list, highPriorityShiftsLeft, NULL);
+        struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+        return t->priority;
+    }else {
+        return PRI_MIN;
+    }
 }
 
 /* Sets the current thread's nice value to NICE. */
