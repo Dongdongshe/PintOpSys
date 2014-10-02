@@ -87,6 +87,17 @@ highPriorityShiftsLeft (const struct list_elem *_a,
 
 }
 
+static bool
+highPriorityShiftsLeft_lock(const struct list_elem *_a,
+                            const struct list_elem *_b,
+                            void *aux) {
+    const struct lock *a = list_entry(_a, struct lock, elem);
+    const struct lock *b = list_entry(_b, struct lock, elem);
+
+    return a->holder->priority > b->holder->priority;
+}
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -357,7 +368,17 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
+  struct thread *cur = thread_current() ;
+  if (cur->donationLevel > 0) {
+      if(!list_empty(&cur->holding_locks)) {
+        struct semaphore sema = list_entry (list_front (&cur->holding_locks), struct lock, elem)->semaphore;
+        struct thread *highestWaiting = list_entry (list_front (&sema.waiters), struct thread, elem);
+        cur->originalPriority = new_priority;
+      }
+  }else {
+    cur->priority = new_priority;
+  }
+
   //thread_current ()->originalPriority = new_priority;
   //enum intr_level old_level = intr_disable();
   //lock_priorityDonation(thread_current()->lock_wanted);
