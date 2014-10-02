@@ -388,14 +388,13 @@ lock_priorityReturn(struct lock *lock) {
                     if (!list_empty (&beneficiary->holding_locks)) {
                         struct semaphore semap = list_entry (list_front (&beneficiary->holding_locks), struct lock, elem)->semaphore;
                         struct thread *highestWaiting = list_entry (list_front (&semap.waiters), struct thread, elem);
-                        if (beneficiary->priority < highestWaiting->priority) {
+                        //if (beneficiary->priority < highestWaiting->priority) {
                             beneficiary->priority = highestWaiting->priority;
                             beneficiary->donationLevel--;
-                        }else {
+                        //}else {
                             // it has highest among all the threads, because of that, it's going to preempt the cpu
-                            beneficiary->donationLevel = 0;
-                        }
-
+                            //beneficiary->donationLevel = 0;
+                        //}
                     } else {
                         // beneficiary does not have anymore locks holding
                         beneficiary->priority = beneficiary->originalPriority;
