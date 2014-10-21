@@ -54,6 +54,27 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+    /**arg pass*/
+    char *command_line;
+    char *token, *save_ptr;
+    char S[] = "";
+    int argc = 0;
+    int numBytes = 0;
+    int word_align = 0;
+
+    command_line = palloc_get_page (0);
+    strlcpy(command_line, file_name, PGSIZE);
+    strlcpy(S, file_name, PGSIZE);
+    for (token = strtok_r (s, " ", &save_ptr); token != NULL;
+            token = strtok_r (NULL, " ", &save_ptr)){
+        if (argc == 0) {
+            strlcpy(file_name, token, PGSIZE); /* First token is filename */
+        }
+        numBytes += (strlen(token)+1); /* strlen excludes \0 character */
+        argc++;
+    }
+
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -65,6 +86,42 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   if (!success)
     thread_exit ();
+
+
+    void *esp_top = if_.esp; /* the top of the stack (bar\0 in the example) */
+
+    if_.esp = if_.esp - numBytes;
+    i = 0;
+    void *esp_bot;                              /* bot enables easier storage */
+    if (numBytes % 4 == 0) /* exactly fits into words, no need for alignment */
+        word_align = 0;
+    else
+        word_align = 4 - (numBytes % 4);
+    esp_bot = if_.esp - word_align - 4 * (argc + 1);
+
+    for( token = strtok_r(command_line, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+
+          /* push argument */
+          strlcpy((char *)if_.esp, token, strlen(token)+1);
+          /* push address */
+          *(unsigned int *)(esp_start + 4 * i++) = (unsigned int)if_.esp;
+          if_.esp = if_.esp + strlen(token) + 1;
+          *(char *)if_.esp = '\0';
+
+    }
+
+    /* push addr. of argv */
+    if_.esp = esp_start - 4;
+    *(unsigned int *)if_.esp = (unsigned int)(if_.esp + 4);
+
+    /* push argc */
+    if_.esp = esp_start - 8;
+    *(int *)if_.esp = argc;
+
+    /* push return addr. */
+    if_.esp = esp_start - 12;
+    *(int *)if_.esp = 0;
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -89,10 +146,27 @@ int
 process_wait (tid_t child_tid UNUSED)
 {
     /**
-    pauses the parent until the child finishes, crashes, or is terminated.
+        pauses the parent until the child finishes, crashes, or is terminated.
+        -- it might not be safe to disable interrupt here
     */
-    for (;;) {} /// TODO: Infinite loop is temporarily added
-  return -1;
+    struct thread *cur = thread_current();
+    struct list_elem *e;
+    struct thread *t;
+    if (list_empty(&cur->children))
+        return -1;
+    bool isDirect = false;
+    for (e = list_begin (&cur->children); e != list_end (&cur->children); e = list_next (e)) {
+        t = list_entry (e, struct thread, child_elem);
+        if (child_tid == t->tid)  /** Child is removed from the list once they are watied */
+            isDirect = true;
+    }
+    if (!isDirect)  /** Not direct decendant or waited for the pid before */
+        return -1;
+    lock_acquire(&cur->waitLock);        /** Similarly, child has to acquire and signal when releasing*/
+    while(!t->isFinished || t->exit_status != -1) { /**TODO: what exit status exactly am i looking for???*/
+        cond_wait(&cur->waitCV, &cur->waitLock);
+    }
+    return t->exit_status;
 }
 
 /* Free the current process's resources. */
@@ -101,7 +175,11 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  /*
+    lock_acquire(&cur->parent_thread->waitLock);
+    //cur->exit_status = 0;
+    cond_signal(&cur->parent_thread->waitCV, &cur->parent_thread->waitLock);
+    lock_release(&cur->parent_thread->waitLock);*/
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -440,8 +518,9 @@ setup_stack (void **esp)
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE - 12; /// TODO: temporarily changed from PHYS_BASE to PHYS_BASE-12
+      if (success) {
+        *esp = PHYS_BASE;
+      }
       else
         palloc_free_page (kpage);
     }

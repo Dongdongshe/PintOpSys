@@ -198,6 +198,14 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+    /** for userprog */
+#ifdef USERPROG
+    t->exit_status = 0;
+    struct thread *parent = thread_current();
+    t->parent_thread = parent;
+    list_push_back(&parent->children, &t->child_elem);
+#endif
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -464,6 +472,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   //t->waketime = 0;              ///Initially, just zero
   t->magic = THREAD_MAGIC;
+#ifdef USERPROG
+    list_init(&t->children);
+    lock_init(&t->waitLock);
+    cond_init(&t->waitCV);
+    t->isFinished = false;
+#endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

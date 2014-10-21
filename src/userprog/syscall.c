@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 
 #include "devices/shutdown.h"
+#include "filesys/filesys.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -14,7 +15,7 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-void    __sys_halt(uint32_t *esp);      /*void 	    halt (void) NO_RETURN                               */
+void    __sys_halt();                   /*void 	    halt (void) NO_RETURN                               */
 void    __sys_exit(uint32_t *esp);      /*void 	    exit (int status) NO_RETURN                         */
 pid_t   __sys_exec(uint32_t *esp);      /*pid_t 	exec (const char *file)                             */
 int     __sys_wait(uint32_t *esp);      /*int 	    wait (pid_t)                                        */
@@ -39,7 +40,7 @@ int 	inumber (int fd)*/
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
-    printf ("system call!\n");
+    //printf ("system call!\n");
     uint32_t *esp = f->esp;
     uint32_t sysnum    = *esp++;
 
@@ -70,7 +71,7 @@ syscall_handler (struct intr_frame *f UNUSED)
         default                 : break;
     }
 
-  thread_exit ();
+  //thread_exit ();
 }
 
 void __sys_halt() {
@@ -86,11 +87,19 @@ void __sys_exit(uint32_t *esp) {
     struct thread *curr = thread_current();
     printf("%s: exit(%d)\n", curr->name, *status);
     /*TODO: Wake up parents waiting for this child*/
+    lock_acquire(&curr->parent_thread->waitLock);
+    curr->isFinished = true;
+    curr->exit_status = status;   /** Process exit normally */
+    cond_signal(&curr->parent_thread->waitCV, &curr->parent_thread->waitLock); /** signal and release the parent */
+    lock_release(&curr->parent_thread->waitLock);
     thread_exit();
 }
 
-pid_t   __sys_exec(uint32_t *esp)
-{return 0;}
+pid_t   __sys_exec(uint32_t *esp){
+    char *file = (char *)(*esp)++;
+    tid_t tid = process_execute(file);
+    return tid;
+}
 
 /**
     Waits for child process' pid and returns child's exit status
@@ -102,8 +111,10 @@ int __sys_wait(uint32_t *esp){
 }
 bool    __sys_create(uint32_t *esp)
 {return false;}
-bool    __sys_remove(uint32_t *esp)
-{return false;}
+bool    __sys_remove(uint32_t *esp){
+    char *file = (char *)(*esp)++;
+    return filesys_remove(file);
+}
 int     __sys_open(uint32_t *esp)
 {return 0;}
 int     __sys_filesize(uint32_t *esp)

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -17,12 +18,15 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+/**Process identifier type*/
+typedef int pid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
 
 /* A kernel thread or user process.
 
@@ -100,6 +104,14 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct list children;               /* List for children processes */
+    struct list_elem child_elem;        /* List element for child_list */
+    struct thread *parent_thread;       /* Basically parent process */
+    pid_t pid;                          /* process identifier */
+    struct lock waitLock;               /* lock for waiting children */
+    struct condition waitCV;            /* conditional variable to be used with waitLock*/
+    int exit_status;                    /* record of exit status */
+    bool isFinished;                    /* child process is finished exec */
 #endif
 
     /* Owned by thread.c. */
