@@ -28,6 +28,16 @@ typedef int pid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 
+struct child_proc {
+    struct list_elem elem;        /* List element for child_list */
+    int exit_status;                    /* record of exit status */
+    bool isFinished;                    /* child process is finished exec */
+    tid_t child_tid;
+    struct lock waitLock;               /* lock for waiting children */
+    struct condition waitCV;            /* conditional variable to be used with waitLock*/
+    bool canWait;                       /* record of parent waiting */
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -105,13 +115,10 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct list children;               /* List for children processes */
-    struct list_elem child_elem;        /* List element for child_list */
     struct thread *parent_thread;       /* Basically parent process */
     pid_t pid;                          /* process identifier */
-    struct lock waitLock;               /* lock for waiting children */
-    struct condition waitCV;            /* conditional variable to be used with waitLock*/
-    int exit_status;                    /* record of exit status */
-    bool isFinished;                    /* child process is finished exec */
+    //struct lock waitLock;               /* lock for waiting children */
+    //struct condition waitCV;            /* conditional variable to be used with waitLock*/
 #endif
 
     /* Owned by thread.c. */

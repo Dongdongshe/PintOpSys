@@ -40,8 +40,20 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
+  }else {
+    struct thread *parent = thread_current();
+    struct child_proc *child;
+    child = palloc_get_page (PAL_ZERO);
+    child->exit_status = 0;
+    child->child_tid = tid;
+    child->isFinished = false;
+    child->canWait = true;
+    lock_init(&child->waitLock);
+    cond_init(&child->waitCV);
+    list_push_back(&parent->children, &child->elem);
+  }
   return tid;
 }
 
@@ -144,22 +156,26 @@ process_wait (tid_t child_tid UNUSED)
     */
     struct thread *cur = thread_current();
     struct list_elem *e;
-    struct thread *t;
+    struct child_proc *child;
     if (list_empty(&cur->children))
         return -1;
-    bool isDirect = false;
+    bool shouldWait = false;
     for (e = list_begin (&cur->children); e != list_end (&cur->children); e = list_next (e)) {
-        t = list_entry (e, struct thread, child_elem);
-        if (child_tid == t->tid)  /** Child is removed from the list once they are watied */
-            isDirect = true;
+        child = list_entry (e, struct child_proc, elem);
+        if (child_tid == child->child_tid && child->canWait) {
+            /** direct decendant and not waited for the pid  */
+            shouldWait = true; child->canWait = false;
+            break;
+        }
     }
-    if (!isDirect)  /** Not direct decendant or waited for the pid before */
+    if (!shouldWait)
         return -1;
-    lock_acquire(&cur->waitLock);        /** Similarly, child has to acquire and signal when releasing*/
-    while(!t->isFinished || t->exit_status != -1) { /**TODO: what exit status exactly am i looking for???*/
-        cond_wait(&cur->waitCV, &cur->waitLock);
+    lock_acquire(&child->waitLock);        /** Similarly, child has to acquire and signal when releasing*/
+    while(!child->isFinished && child->exit_status != -1) { /**TODO: what exit status exactly am i looking for???*/
+        cond_wait(&child->waitCV, &child->waitLock);
     }
-    return t->exit_status;
+    lock_release(&child->waitLock);
+    return child->exit_status;          /**How do i determine exit status?*/
 }
 
 /* Free the current process's resources. */
@@ -168,11 +184,24 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  /*
-    lock_acquire(&cur->parent_thread->waitLock);
+
+    struct list_elem *e;
+    struct child_proc *child;
+    struct thread *parent = cur->parent_thread;
+    if (!list_empty(&parent->children)) {
+        for (e = list_begin (&parent->children); e != list_end (&parent->children); e = list_next (e)) {
+            child = list_entry (e, struct child_proc, elem);
+            if (cur->tid == child->child_tid) {
+                break;  /* Identify current child from parent */
+            }
+        }
+    }
+
+    lock_acquire(&child->waitLock);
     //cur->exit_status = 0;
-    cond_signal(&cur->parent_thread->waitCV, &cur->parent_thread->waitLock);
-    lock_release(&cur->parent_thread->waitLock);*/
+    child->isFinished = true;
+    cond_signal(&child->waitCV, &child->waitLock);
+    lock_release(&child->waitLock);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

@@ -200,10 +200,9 @@ thread_create (const char *name, int priority,
 
     /** for userprog */
 #ifdef USERPROG
-    t->exit_status = 0;
-    struct thread *parent = thread_current();
-    t->parent_thread = parent;
-    list_push_back(&parent->children, &t->child_elem);
+    t->parent_thread = thread_current();
+    //t->exit_status = 0;
+    //list_push_back(&parent->children, &t->child_elem);
 #endif
 
   /* Add to run queue. */
@@ -474,9 +473,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 #ifdef USERPROG
     list_init(&t->children);
-    lock_init(&t->waitLock);
-    cond_init(&t->waitCV);
-    t->isFinished = false;
+    //lock_init(&t->waitLock);
+    //cond_init(&t->waitCV);
+    //t->isFinished = false;
 #endif
 
   old_level = intr_disable ();

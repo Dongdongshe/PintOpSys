@@ -6,6 +6,9 @@
 
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "userprog/pagedir.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -48,16 +51,16 @@ syscall_handler (struct intr_frame *f UNUSED)
         /*Project2*/
         case SYS_HALT           : __sys_halt(); break;
         case SYS_EXIT           : __sys_exit(esp); break;
-        case SYS_EXEC           : __sys_exec(esp); break;
-        case SYS_WAIT           : __sys_wait(esp); break;
-        case SYS_CREATE         : __sys_create(esp); break;
-        case SYS_REMOVE         : __sys_remove(esp); break;
-        case SYS_OPEN           : __sys_open(esp); break;
-        case SYS_FILESIZE       : __sys_filesize(esp); break;
-        case SYS_READ           : __sys_read(esp); break;
-        case SYS_WRITE          : __sys_write(esp); break;
+        case SYS_EXEC           : f->eax = __sys_exec(esp); break;
+        case SYS_WAIT           : f->eax = __sys_wait(esp); break;
+        case SYS_CREATE         : f->eax = __sys_create(esp); break;
+        case SYS_REMOVE         : f->eax = __sys_remove(esp); break;
+        case SYS_OPEN           : f->eax = __sys_open(esp); break;
+        case SYS_FILESIZE       : f->eax = __sys_filesize(esp); break;
+        case SYS_READ           : f->eax = __sys_read(esp); break;
+        case SYS_WRITE          : f->eax = __sys_write(esp); break;
         case SYS_SEEK           : __sys_seek(esp); break;
-        case SYS_TELL           : __sys_tell(esp); break;
+        case SYS_TELL           : f->eax = __sys_tell(esp); break;
         case SYS_CLOSE          : __sys_close(esp); break;
         /* Below, Project3 and later*/
         case SYS_MMAP           : break;
@@ -84,15 +87,11 @@ void __sys_halt() {
 */
 void __sys_exit(uint32_t *esp) {
     int *status = *(esp)++;
-    struct thread *curr = thread_current();
-    printf("%s: exit(%d)\n", curr->name, *status);
+    char *save_ptr;
+    char *name = strtok_r(thread_name(), " ", &save_ptr);
+    printf("%s: exit(%d)\n", name, status);
     /*TODO: Wake up parents waiting for this child*/
-    lock_acquire(&curr->parent_thread->waitLock);
-    curr->isFinished = true;
-    curr->exit_status = status;   /** Process exit normally */
-    cond_signal(&curr->parent_thread->waitCV, &curr->parent_thread->waitLock); /** signal and release the parent */
-    lock_release(&curr->parent_thread->waitLock);
-    thread_exit();
+    thread_exit();  /* thread_exit calls process_exit() and process_exit() will wake up parents */
 }
 
 pid_t   __sys_exec(uint32_t *esp){
@@ -106,7 +105,7 @@ pid_t   __sys_exec(uint32_t *esp){
 */
 int __sys_wait(uint32_t *esp){
     pid_t *child_pid = *(esp)++;
-    int child_exit_status = process_wait(*child_pid);
+    int child_exit_status = process_wait(child_pid);
     return child_exit_status;
 }
 bool    __sys_create(uint32_t *esp)
@@ -136,7 +135,7 @@ int __sys_write(uint32_t *esp) {
         return size;
     }else if (fd > 1){          /// other than console
         /**TODO: file write*/
-        return 0;
+        return -1;
     }else {                     /// should not get here
         return -1;
     }
