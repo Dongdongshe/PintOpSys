@@ -96,8 +96,8 @@ void __sys_exit(uint32_t *esp) {
 }
 
 pid_t   __sys_exec(uint32_t *esp){
-    char *file = (char *)(*esp)++;
-    tid_t tid = process_execute(file);
+    char *cmd_line = (char *)(*esp)++;
+    tid_t tid = process_execute(cmd_line);
     return tid;
 }
 

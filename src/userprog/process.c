@@ -55,22 +55,20 @@ start_process (void *file_name_)
   bool success;
 
     /**arg pass*/
-    char *command_line;
-    char *token, *save_ptr;
-    char S[] = "";
-    int argc = 0;
-    int numBytes = 0;
-    int word_align = 0;
 
-    command_line = palloc_get_page (0);
-    strlcpy(command_line, file_name, PGSIZE);
-    strlcpy(S, file_name, PGSIZE);
-    for (token = strtok_r (s, " ", &save_ptr); token != NULL;
-            token = strtok_r (NULL, " ", &save_ptr)){
-        if (argc == 0) {
-            strlcpy(file_name, token, PGSIZE); /* First token is filename */
-        }
-        numBytes += (strlen(token)+1); /* strlen excludes \0 character */
+    char S[] = "";
+    char *command_line, *token, *save_ptr;
+    int word_align = 0;
+    int bytes = 0, argc = 0, num_arg = 0; /* num_arg is implement specific */
+
+    command_line = palloc_get_page (0); /* allocate page */
+    strlcpy(command_line, file_name, PGSIZE);  /* make copy of the command_line */
+
+    strlcpy(S, file_name, strlen(file_name) + 1); /* extra copy of the command_line */
+    for( token = strtok_r(S, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+        if (argc == 0)
+            strlcpy(file_name, token, strlen(token)+1);
+        bytes = bytes + strlen(token) + 1;
         argc++;
     }
 
@@ -82,45 +80,40 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+        ////
+    void *esp_frame;
+    if (bytes % 4 == 0)
+        word_align = 0;
+    else
+        word_align = 4 - (bytes % 4);
+    if_.esp = if_.esp - bytes;                              /* decrement sp as much as there are bytes for argv */
+    esp_frame = if_.esp - word_align - 4 * (argc + 1);      /* frame points to the bottom */
+
+    for( token = strtok_r(command_line, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+
+          strlcpy((char *)if_.esp, token, strlen(token)+1);                         /* push arg token */
+          *(unsigned int *)(esp_frame + (4 * num_arg)) = (unsigned int)if_.esp;     /* push the address of arg just pushed */
+          num_arg++;                                                                /* increment num_arg */
+          if_.esp = if_.esp + strlen(token) + 1;
+          *(char *)if_.esp = '\0';
+
+    }
+
+    if_.esp = esp_frame - 4;    /* push char** argv */
+    *(unsigned int *)if_.esp = (unsigned int)(if_.esp + 4);
+    if_.esp = esp_frame - 8;
+    *(int *)if_.esp = argc;     /* push argc */
+    if_.esp = esp_frame - 12;
+    *(int *)if_.esp = 0;        /* push dummy return addr. */
+        ////
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success)
     thread_exit ();
 
 
-    void *esp_top = if_.esp; /* the top of the stack (bar\0 in the example) */
 
-    if_.esp = if_.esp - numBytes;
-    i = 0;
-    void *esp_bot;                              /* bot enables easier storage */
-    if (numBytes % 4 == 0) /* exactly fits into words, no need for alignment */
-        word_align = 0;
-    else
-        word_align = 4 - (numBytes % 4);
-    esp_bot = if_.esp - word_align - 4 * (argc + 1);
-
-    for( token = strtok_r(command_line, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
-
-          /* push argument */
-          strlcpy((char *)if_.esp, token, strlen(token)+1);
-          /* push address */
-          *(unsigned int *)(esp_start + 4 * i++) = (unsigned int)if_.esp;
-          if_.esp = if_.esp + strlen(token) + 1;
-          *(char *)if_.esp = '\0';
-
-    }
-
-    /* push addr. of argv */
-    if_.esp = esp_start - 4;
-    *(unsigned int *)if_.esp = (unsigned int)(if_.esp + 4);
-
-    /* push argc */
-    if_.esp = esp_start - 8;
-    *(int *)if_.esp = argc;
-
-    /* push return addr. */
-    if_.esp = esp_start - 12;
-    *(int *)if_.esp = 0;
 
 
   /* Start the user process by simulating a return from an
