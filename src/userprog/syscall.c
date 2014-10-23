@@ -45,7 +45,7 @@ void sys_exit_internal(int status);     /* exit function to be used internally *
 bool is_valid_user_addr(void *uaddr);   /* checks if the user address is valid */
 
 bool is_valid_user_addr(void *uaddr) {
-    if (!is_user_vaddr(uaddr))  /* prevent possible assertion failure */
+    if (!is_user_vaddr(uaddr) || uaddr == NULL)  /* prevent possible assertion failure */
         return false;
     uint32_t *pd = thread_current()->pagedir;
     return (pagedir_get_page(pd, uaddr) != NULL);
@@ -113,7 +113,8 @@ void sys_exit_internal(int status) { //int pointer? or just int?
 }
 
 pid_t   __sys_exec(uint32_t *esp){
-
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     char *cmd_line = (char *)(*esp)++;
     tid_t tid = process_execute(cmd_line);
     return tid;
@@ -123,6 +124,8 @@ pid_t   __sys_exec(uint32_t *esp){
     Waits for child process' pid and returns child's exit status
 */
 int __sys_wait(uint32_t *esp){
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     pid_t *child_pid = *(esp)++;
     int child_exit_status = process_wait(child_pid);
     return child_exit_status;
@@ -133,6 +136,8 @@ int __sys_wait(uint32_t *esp){
     Createing a new file does not open it.
 */
 bool    __sys_create(uint32_t *esp) {
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     const char *file = (char *)(*esp)++;
     unsigned initial_size = (unsigned)(*esp)++;
     return filesys_create(file, initial_size);
@@ -144,6 +149,8 @@ bool    __sys_create(uint32_t *esp) {
     open file does not close it.
 */
 bool    __sys_remove(uint32_t *esp){
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     char *file = (char *)(*esp)++;
     return filesys_remove(file);
 }
@@ -153,6 +160,8 @@ bool    __sys_remove(uint32_t *esp){
     or -1 if the file could not be opened
 */
 int     __sys_open(uint32_t *esp) {
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     char *file = (char *)(*esp)++;
     if (file == NULL)
         return -1;
@@ -178,8 +187,14 @@ int     __sys_read(uint32_t *esp)
     Writes 'size' bytes from 'buffer' to the open file 'fd' Then returns the number of bytes actually written.
 */
 int __sys_write(uint32_t *esp) {
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     int fd                  = *(esp)++;
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     const void *buffer      = *(esp)++;
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
     unsigned size           = *(esp)++;
 
     /**TODO: validate the memory address*/
