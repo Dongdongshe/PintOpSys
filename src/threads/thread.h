@@ -29,8 +29,8 @@ typedef int pid_t;
 
 
 struct child_proc {
-    struct list_elem elem;        /* List element for child_list */
-    int exit_status;                    /* record of exit status */
+    struct list_elem elem;              /* List element for child_list */
+    int exit_status;                    /* record of exit status, two copies: one for syscall one for wait */
     bool isFinished;                    /* child process is finished exec */
     tid_t child_tid;
     struct lock waitLock;               /* lock for waiting children */
@@ -117,6 +117,7 @@ struct thread
     struct list children;               /* List for children processes */
     struct thread *parent_thread;       /* Basically parent process */
     pid_t pid;                          /* process identifier */
+    int exit_status;                    /* exit status will owned by thread and in the child structure */
     //struct lock waitLock;               /* lock for waiting children */
     //struct condition waitCV;            /* conditional variable to be used with waitLock*/
 #endif

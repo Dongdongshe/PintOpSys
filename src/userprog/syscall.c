@@ -90,7 +90,8 @@ void __sys_exit(uint32_t *esp) {
     char *save_ptr;
     char *name = strtok_r(thread_name(), " ", &save_ptr);
     printf("%s: exit(%d)\n", name, status);
-    /*TODO: Wake up parents waiting for this child*/
+    thread_current()->exit_status = status;
+    /*Wake up parents waiting for this child*/
     thread_exit();  /* thread_exit calls process_exit() and process_exit() will wake up parents */
 }
 

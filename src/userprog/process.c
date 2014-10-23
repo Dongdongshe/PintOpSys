@@ -199,6 +199,7 @@ process_exit (void)
 
     lock_acquire(&child->waitLock);
     //cur->exit_status = 0;
+    child->exit_status = cur->exit_status;
     child->isFinished = true;
     cond_signal(&child->waitCV, &child->waitLock);
     lock_release(&child->waitLock);
