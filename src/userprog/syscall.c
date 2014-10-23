@@ -6,6 +6,7 @@
 
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
@@ -40,12 +41,25 @@ bool 	readdir (int fd, char name[READDIR_MAX_LEN+1])
 bool 	isdir (int fd)
 int 	inumber (int fd)*/
 
+void sys_exit_internal(int status);     /* exit function to be used internally */
+bool is_valid_user_addr(void *uaddr);   /* checks if the user address is valid */
+
+bool is_valid_user_addr(void *uaddr) {
+    if (!is_user_vaddr(uaddr))  /* prevent possible assertion failure */
+        return false;
+    uint32_t *pd = thread_current()->pagedir;
+    return (pagedir_get_page(pd, uaddr) != NULL);
+
+}
+
+
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
-    //printf ("system call!\n");
-    uint32_t *esp = f->esp;
-    uint32_t sysnum    = *esp++;
+    uint32_t *esp       = f->esp;
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    uint32_t sysnum     = *esp++;
 
     switch(sysnum) {
         /*Project2*/
@@ -87,6 +101,9 @@ void __sys_halt() {
 */
 void __sys_exit(uint32_t *esp) {
     int *status = *(esp)++;
+    sys_exit_internal(status);
+}
+void sys_exit_internal(int status) { //int pointer? or just int?
     char *save_ptr;
     char *name = strtok_r(thread_name(), " ", &save_ptr);
     printf("%s: exit(%d)\n", name, status);
@@ -96,6 +113,7 @@ void __sys_exit(uint32_t *esp) {
 }
 
 pid_t   __sys_exec(uint32_t *esp){
+
     char *cmd_line = (char *)(*esp)++;
     tid_t tid = process_execute(cmd_line);
     return tid;
@@ -109,14 +127,48 @@ int __sys_wait(uint32_t *esp){
     int child_exit_status = process_wait(child_pid);
     return child_exit_status;
 }
-bool    __sys_create(uint32_t *esp)
-{return false;}
+/**
+   Creates new file called file initially initial_size bytes in size.
+    returns true if successful, false otherwise.
+    Createing a new file does not open it.
+*/
+bool    __sys_create(uint32_t *esp) {
+    const char *file = (char *)(*esp)++;
+    unsigned initial_size = (unsigned)(*esp)++;
+    return filesys_create(file, initial_size);
+}
+
+/**
+    Deletes the file called file. Returns true if successful, false otherwise.
+    A file may be removed regardless of whether it is opened or closed, and removing an
+    open file does not close it.
+*/
 bool    __sys_remove(uint32_t *esp){
     char *file = (char *)(*esp)++;
     return filesys_remove(file);
 }
-int     __sys_open(uint32_t *esp)
-{return 0;}
+
+/**
+    Opens the file called file. Returns a nonnegative integer handle called a "file descriptor" (fd),
+    or -1 if the file could not be opened
+*/
+int     __sys_open(uint32_t *esp) {
+    char *file = (char *)(*esp)++;
+    if (file == NULL)
+        return -1;
+    struct thread *t = thread_current();
+    int fd;                         /* fd 0, 1 are reserved for stdin and stdout */
+    for(fd = 2; fd < 128; fd++){    /* 128 is pintos-doc specified limit */
+        if(t->fdtable[fd] == NULL){
+            t->fdtable[fd] = filesys_open(file);
+            if(t->fdtable[fd] == NULL)
+                return -1;
+            else
+                return fd;
+        }
+    }
+    return -1;
+}
 int     __sys_filesize(uint32_t *esp)
 {return 0;}
 int     __sys_read(uint32_t *esp)

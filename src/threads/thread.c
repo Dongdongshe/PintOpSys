@@ -473,9 +473,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 #ifdef USERPROG
     list_init(&t->children);
-    //lock_init(&t->waitLock);
-    //cond_init(&t->waitCV);
-    //t->isFinished = false;
+    int i;  /* init fdtable */
+    for(i=0; i < 128; i++)
+        t->fdtable[i] = NULL;
 #endif
 
   old_level = intr_disable ();
@@ -552,6 +552,8 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread)
     {
       ASSERT (prev != cur);
+      if (prev->pagedir != NULL)        /* DESTROY and free up the resources for user prog*/
+        pagedir_destroy(prev->pagedir);
       palloc_free_page (prev);
     }
 }
