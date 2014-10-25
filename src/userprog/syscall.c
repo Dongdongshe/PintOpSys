@@ -195,11 +195,11 @@ int     __sys_open(uint32_t *esp) {
 int     __sys_filesize(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd = (*esp++);
+    int fd = (int)*(esp++);
     struct thread *t = thread_current();
-    if (t->fdtable[*fd] == NULL)
+    if (t->fdtable[fd] == NULL)
         return -1;
-    return (int)file_length(&t->fdtable[*fd]);
+    return (int)file_length(&t->fdtable[fd]);
 }
 
 /**
@@ -210,7 +210,7 @@ int     __sys_filesize(uint32_t *esp){
 int     __sys_read(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd = (*esp++);
+    int fd = (int)*(esp++);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
     char *buffer = (char *)(*esp++);
@@ -218,7 +218,7 @@ int     __sys_read(uint32_t *esp){
         sys_exit_internal(-1);
     uint32_t size = (uint32_t)(*esp++);
     /* Console read */
-    if( *fd == 0 ){
+    if( fd == 0 ){
         uint32_t i = 0;
         while (1) {
             uint8_t key = input_getc();
@@ -233,12 +233,12 @@ int     __sys_read(uint32_t *esp){
         return size;
     }
     // read from user file
-    else if( *fd > 1 ){
+    else if( fd > 1 ){
         struct thread *t = thread_current();
-        if(t->fdtable[*fd] == NULL )
+        if(t->fdtable[fd] == NULL )
             return -1;
         else
-            return file_read(t->fdtable[*fd],buffer,size);
+            return file_read(t->fdtable[fd],buffer,size);
     }
     /*should not get here*/
     return -1;
@@ -250,23 +250,23 @@ int     __sys_read(uint32_t *esp){
 int __sys_write(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd                  = *(esp++);
+    int fd  = (int)*(esp++);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    const void *buffer      = *(esp++);
+    const void *buffer = *(esp++);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    unsigned size           = *(esp++);
+    unsigned size = (unsigned)*(esp++);
 
     if (fd == 1) {              /// the console write
         putbuf(buffer, size);
         return size;
     }else if (fd > 1){          /// other than console
         struct thread *t = thread_current();
-        if (t->fdtable[*fd] == NULL )
+        if (t->fdtable[fd] == NULL )
             return -1;
         else
-            return file_write(t->fdtable[*fd],buffer,size);
+            return file_write(t->fdtable[fd],buffer,size);
     }else {                     /// should not get here
         return -1;
     }
@@ -279,12 +279,12 @@ int __sys_write(uint32_t *esp) {
 void    __sys_seek(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd = (*esp++);
+    int fd = (int)*(esp++);
     struct thread *t = thread_current();
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    uint32_t *pos = (*esp++);
-    file_seek(t->fdtable[*fd], pos);
+    uint32_t pos = (uint32_t)*(esp++);
+    file_seek(t->fdtable[fd], pos);
 }
 
 /**
@@ -294,8 +294,8 @@ void    __sys_seek(uint32_t *esp) {
 unsigned    __sys_tell(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd = (*esp++);
-    return file_tell(thread_current()->fdtable[*fd]);
+    int fd = (int)*(esp++);
+    return file_tell(thread_current()->fdtable[fd]);
 }
 
 /**
@@ -305,8 +305,11 @@ unsigned    __sys_tell(uint32_t *esp) {
 void    __sys_close(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int *fd = (*esp++);
+    int fd = (int)*(esp++);
+    if (fd <= 1 || fd >= 128)
+        sys_exit_internal(-1);
     struct thread *t = thread_current();
-    file_close(t->fdtable[*fd]);
-    t->fdtable[*fd] = NULL;
+    //printf("\n\n %d \n\n", fd);
+    file_close(t->fdtable[fd]);
+    t->fdtable[fd] = NULL;
 }
