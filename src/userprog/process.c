@@ -11,6 +11,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -38,17 +39,28 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-//    char *temp;
-//    temp = palloc_get_page (0);
-//    strlcpy(temp, file_name, sizeof (file_name));
-//    char *save_ptr;
-//    char *token = strtok_r(temp, " ", &save_ptr);
+    char *temp;
+    temp = palloc_get_page (0);
+    strlcpy(temp, file_name, PGSIZE);
+    char *save_ptr;
+    char *token = strtok_r(temp, " ", &save_ptr);
 //    struct file *executed_file = filesys_open(token);
 //    if (executed_file == NULL)
 //        return TID_ERROR;
 //    else
 //        file_close(executed_file);
 
+//    printf("\n\n\n\ntoken: %s\n\n\n", token);
+    struct dir *dir = dir_open_root ();
+    struct inode *inode = NULL;
+
+    if (dir != NULL)
+        dir_lookup (dir, token, &inode);
+    dir_close (dir);
+
+    if (inode == NULL) {
+        return TID_ERROR;
+    }
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
