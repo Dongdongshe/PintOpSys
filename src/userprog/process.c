@@ -83,7 +83,12 @@ start_process (void *file_name_)
         bytes = bytes + strlen(token) + 1;
         argc++;
     }
-
+    /*write protection*/
+    struct file *executed_file = filesys_open(file_name);
+    thread_current()->executed_file = executed_file;
+    if (executed_file != NULL) {
+        file_deny_write(executed_file);
+    }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -218,6 +223,15 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+    }
+    file_close (cur->executed_file);
+
+    int i;
+    for(i=2;i<128;i++) {
+        if(cur->fdtable[i]!=NULL){
+            file_close(cur->fdtable[i]);
+            cur->fdtable[i] == NULL;
+        }
     }
 }
 

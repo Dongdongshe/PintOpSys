@@ -100,7 +100,9 @@ void __sys_halt() {
     this is the status that will be returned. Conventionally, a status of 0 indicates success and nonzero values indicate errors
 */
 void __sys_exit(uint32_t *esp) {
-    int *status = *(esp)++;
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *status = *(esp++);
     sys_exit_internal(status);
 }
 void sys_exit_internal(int status) { //int pointer? or just int?
@@ -115,7 +117,7 @@ void sys_exit_internal(int status) { //int pointer? or just int?
 pid_t   __sys_exec(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    char *cmd_line = (char *)(*esp)++;
+    char *cmd_line = (char *)(*esp++);
     tid_t tid = process_execute(cmd_line);
     return tid;
 }
@@ -126,7 +128,7 @@ pid_t   __sys_exec(uint32_t *esp){
 int __sys_wait(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    pid_t *child_pid = *(esp)++;
+    pid_t *child_pid = *esp++;
     int child_exit_status = process_wait(child_pid);
     return child_exit_status;
 }
@@ -136,10 +138,16 @@ int __sys_wait(uint32_t *esp){
     Createing a new file does not open it.
 */
 bool    __sys_create(uint32_t *esp) {
+    //hex_dump((unsigned int)esp, esp, 64, 1);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    const char *file = (char *)(*esp)++;
-    unsigned initial_size = (unsigned)(*esp)++;
+    const char *file = (char *)(*esp++);
+    //hex_dump((unsigned int)esp, esp, 64, 1);
+    if (!is_valid_user_addr(esp) || !is_valid_user_addr(file))
+        sys_exit_internal(-1);
+    if (file == NULL)
+        sys_exit_internal(-1);
+    uint32_t *initial_size = *(esp++);
     return filesys_create(file, initial_size);
 }
 
@@ -151,7 +159,7 @@ bool    __sys_create(uint32_t *esp) {
 bool    __sys_remove(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    char *file = (char *)(*esp)++;
+    char *file = (char *)(*esp++);
     return filesys_remove(file);
 }
 
@@ -162,9 +170,11 @@ bool    __sys_remove(uint32_t *esp){
 int     __sys_open(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    char *file = (char *)(*esp)++;
+    char *file = (char *)(*esp++);
     if (file == NULL)
         return -1;
+    if (!is_valid_user_addr(file))
+        sys_exit_internal(-1);
     struct thread *t = thread_current();
     int fd;                         /* fd 0, 1 are reserved for stdin and stdout */
     for(fd = 2; fd < 128; fd++){    /* 128 is pintos-doc specified limit */
@@ -178,10 +188,61 @@ int     __sys_open(uint32_t *esp) {
     }
     return -1;
 }
-int     __sys_filesize(uint32_t *esp)
-{return 0;}
-int     __sys_read(uint32_t *esp)
-{return 0;}
+
+/**
+    Returns the size, in bytes, of the ile open as fd
+*/
+int     __sys_filesize(uint32_t *esp){
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *fd = (*esp++);
+    struct thread *t = thread_current();
+    if (t->fdtable[*fd] == NULL)
+        return -1;
+    return (int)file_length(&t->fdtable[*fd]);
+}
+
+/**
+    Reads size bytes from the file open as fd into buffer. Returns the number of bytes actually read
+    (0 at end of file), or -1 if the file could not be read (due to a condition
+    other than end of file). fd 0 reads from the keyboard using input_getc()
+*/
+int     __sys_read(uint32_t *esp){
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *fd = (*esp++);
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    char *buffer = (char *)(*esp++);
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    uint32_t size = (uint32_t)(*esp++);
+    /* Console read */
+    if( *fd == 0 ){
+        uint32_t i = 0;
+        while (1) {
+            uint8_t key = input_getc();
+            if(key==13){                    /* when input == carrage return  */
+                buffer[i] = '\0';           /* put delimiter */
+                break;
+            }
+            else buffer[i++] = key;
+            if (i >= size)
+                break;
+        }
+        return size;
+    }
+    // read from user file
+    else if( *fd > 1 ){
+        struct thread *t = thread_current();
+        if(t->fdtable[*fd] == NULL )
+            return -1;
+        else
+            return file_read(t->fdtable[*fd],buffer,size);
+    }
+    /*should not get here*/
+    return -1;
+}
 
 /**
     Writes 'size' bytes from 'buffer' to the open file 'fd' Then returns the number of bytes actually written.
@@ -189,29 +250,63 @@ int     __sys_read(uint32_t *esp)
 int __sys_write(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    int fd                  = *(esp)++;
+    int *fd                  = *(esp++);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    const void *buffer      = *(esp)++;
+    const void *buffer      = *(esp++);
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
-    unsigned size           = *(esp)++;
+    unsigned size           = *(esp++);
 
-    /**TODO: validate the memory address*/
     if (fd == 1) {              /// the console write
         putbuf(buffer, size);
         return size;
     }else if (fd > 1){          /// other than console
-        /**TODO: file write*/
-        return -1;
+        struct thread *t = thread_current();
+        if (t->fdtable[*fd] == NULL )
+            return -1;
+        else
+            return file_write(t->fdtable[*fd],buffer,size);
     }else {                     /// should not get here
         return -1;
     }
 }
 
-void    __sys_seek(uint32_t *esp)
-{}
-unsigned    __sys_tell(uint32_t *esp)
-{return 0;}
-void    __sys_close(uint32_t *esp)
-{}
+/**
+    Changes the next byte to be read or written in open file fd to position,
+    expressed in btes from the beginning of the file. pos = 0 = file's start
+*/
+void    __sys_seek(uint32_t *esp) {
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *fd = (*esp++);
+    struct thread *t = thread_current();
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    uint32_t *pos = (*esp++);
+    file_seek(t->fdtable[*fd], pos);
+}
+
+/**
+    Returns the position of the next byte to be read or written in open file fd,
+    expressed in bytes from the beginning of the file
+*/
+unsigned    __sys_tell(uint32_t *esp) {
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *fd = (*esp++);
+    return file_tell(thread_current()->fdtable[*fd]);
+}
+
+/**
+    Closes file descriptor fd. Exiting or terminating a process implicitly closes all its
+    open file descriptors, as if by calling this function for each one
+*/
+void    __sys_close(uint32_t *esp){
+    if (!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int *fd = (*esp++);
+    struct thread *t = thread_current();
+    file_close(t->fdtable[*fd]);
+    t->fdtable[*fd] = NULL;
+}

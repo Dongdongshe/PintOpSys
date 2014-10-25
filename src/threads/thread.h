@@ -121,6 +121,7 @@ struct thread
     int exit_status;                    /* exit status will owned by thread and in the child structure */
     //struct lock waitLock;               /* lock for waiting children */
     //struct condition waitCV;            /* conditional variable to be used with waitLock*/
+    struct file *executed_file;          /* keep track of file executed */
 #endif
 
     /* Owned by thread.c. */
