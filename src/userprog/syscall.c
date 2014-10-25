@@ -118,7 +118,11 @@ pid_t   __sys_exec(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
     char *cmd_line = (char *)(*esp++);
+    if (!is_valid_user_addr(cmd_line))
+        sys_exit_internal(-1);
+
     tid_t tid = process_execute(cmd_line);
+
     return tid;
 }
 
@@ -214,9 +218,12 @@ int     __sys_read(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
     char *buffer = (char *)(*esp++);
-    if (!is_valid_user_addr(esp))
+    if (!is_valid_user_addr(esp) || !is_valid_user_addr(buffer))
         sys_exit_internal(-1);
     uint32_t size = (uint32_t)(*esp++);
+
+    if (fd < 0 || fd == 1 || fd >= 128)
+        sys_exit_internal(-1);
     /* Console read */
     if( fd == 0 ){
         uint32_t i = 0;
@@ -232,13 +239,13 @@ int     __sys_read(uint32_t *esp){
         }
         return size;
     }
-    // read from user file
+    /*read from user process file*/
     else if( fd > 1 ){
         struct thread *t = thread_current();
         if(t->fdtable[fd] == NULL )
             return -1;
         else
-            return file_read(t->fdtable[fd],buffer,size);
+            return (int)file_read(t->fdtable[fd], buffer, size);
     }
     /*should not get here*/
     return -1;
@@ -254,9 +261,12 @@ int __sys_write(uint32_t *esp) {
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
     const void *buffer = *(esp++);
-    if (!is_valid_user_addr(esp))
+    if (!is_valid_user_addr(esp) || !is_valid_user_addr(buffer))
         sys_exit_internal(-1);
     unsigned size = (unsigned)*(esp++);
+
+    if (fd < 1 || fd >= 128)
+        sys_exit_internal(-1);
 
     if (fd == 1) {              /// the console write
         putbuf(buffer, size);

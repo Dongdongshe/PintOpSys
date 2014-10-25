@@ -122,6 +122,7 @@ struct thread
     //struct lock waitLock;               /* lock for waiting children */
     //struct condition waitCV;            /* conditional variable to be used with waitLock*/
     struct file *executed_file;          /* keep track of file executed */
+    struct thread *just_created_child;
 #endif
 
     /* Owned by thread.c. */
