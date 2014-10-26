@@ -256,9 +256,9 @@ int     __sys_read(uint32_t *esp){
             //printf("\n\n\nbuffer content: %s, addr: %x, size: %d\n\n\n", buffer, &buffer, strlen(buffer));
             //file_deny_write(t->fdtable[fd]);
             int bytes_read = file_read(t->fdtable[fd], buffer, (off_t)size);
-            if (strlen(buffer) > bytes_read) { /*kind of hack.. but it has to be done to make sure buffer does not contain bogus value in the end*/
-                buffer[bytes_read] = '\0';
-            }
+//            if (strlen(buffer) > bytes_read) { /*kind of hack.. but it has to be done to make sure buffer does not contain bogus value in the end*/
+//                buffer[bytes_read] = '\0';
+//            }
             //printf("\nbytes_read:%d\nbuffer: %s\n buffersize: %d\n", bytes_read, buffer, strlen(buffer));
             return bytes_read;
         }
