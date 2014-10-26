@@ -10,6 +10,7 @@
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
+#include "filesys/off_t.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -114,6 +115,12 @@ void sys_exit_internal(int status) { //int pointer? or just int?
     thread_exit();  /* thread_exit calls process_exit() and process_exit() will wake up parents */
 }
 
+/**
+    Runs the executable whose name is given in cmd_line, passing any given arguments, and returns the
+    new process's program id (pid). Must return -1, which otherwise should not be valid pid, if the program
+    cannot load or run for any reason. Thus, the parent process cannot return from the exec until process
+    successfully loaded its executable. Use sync.
+*/
 pid_t   __sys_exec(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
@@ -151,7 +158,7 @@ bool    __sys_create(uint32_t *esp) {
         sys_exit_internal(-1);
     if (file == NULL)
         sys_exit_internal(-1);
-    uint32_t *initial_size = *(esp++);
+    uint32_t initial_size = *(esp++);
     return filesys_create(file, initial_size);
 }
 
@@ -203,7 +210,7 @@ int     __sys_filesize(uint32_t *esp){
     struct thread *t = thread_current();
     if (t->fdtable[fd] == NULL)
         return -1;
-    return (int)file_length(&t->fdtable[fd]);
+    return (int)file_length(t->fdtable[fd]);
 }
 
 /**
@@ -220,7 +227,7 @@ int     __sys_read(uint32_t *esp){
     char *buffer = (char *)(*esp++);
     if (!is_valid_user_addr(esp) || !is_valid_user_addr(buffer))
         sys_exit_internal(-1);
-    uint32_t size = (uint32_t)(*esp++);
+    unsigned size = (*esp++);
 
     if (fd < 0 || fd == 1 || fd >= 128)
         sys_exit_internal(-1);
@@ -242,10 +249,19 @@ int     __sys_read(uint32_t *esp){
     /*read from user process file*/
     else if( fd > 1 ){
         struct thread *t = thread_current();
-        if(t->fdtable[fd] == NULL )
+        if(t->fdtable[fd] == NULL ){
             return -1;
-        else
-            return (int)file_read(t->fdtable[fd], buffer, size);
+        } else{
+            //buffer = palloc_get_page (0);
+            //printf("\n\n\nbuffer content: %s, addr: %x, size: %d\n\n\n", buffer, &buffer, strlen(buffer));
+            //file_deny_write(t->fdtable[fd]);
+            int bytes_read = file_read(t->fdtable[fd], buffer, (off_t)size);
+            if (strlen(buffer) > bytes_read) { /*kind of hack.. but it has to be done to make sure buffer does not contain bogus value in the end*/
+                buffer[bytes_read] = '\0';
+            }
+            //printf("\nbytes_read:%d\nbuffer: %s\n buffersize: %d\n", bytes_read, buffer, strlen(buffer));
+            return bytes_read;
+        }
     }
     /*should not get here*/
     return -1;
