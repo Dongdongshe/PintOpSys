@@ -11,13 +11,32 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "filesys/off_t.h"
+#include "lib/kernel/list.h"
+#include "threads/synch.h"
+#include "threads/malloc.h"
+#include "filesys/inode.h"
+
+struct file
+  {
+    struct inode *inode;        /* File's inode. */
+    off_t pos;                  /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+  };
 
 static void syscall_handler (struct intr_frame *);
+
+static struct list opened_files;
+struct opened_file {
+    struct list_elem elem;
+    struct inode *inode;
+    struct lock lock;
+};
 
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  list_init(&opened_files);
 }
 
 void    __sys_halt();                   /*void 	    halt (void) NO_RETURN                               */
@@ -127,8 +146,33 @@ pid_t   __sys_exec(uint32_t *esp){
     char *cmd_line = (char *)(*esp++);
     if (!is_valid_user_addr(cmd_line))
         sys_exit_internal(-1);
+    /* check if the file actually exists */
+    char *temp;
+    temp = palloc_get_page (0);
+    strlcpy(temp, cmd_line, PGSIZE);
+    char *save_ptr;
+    char *token = strtok_r(temp, " ", &save_ptr);
+    struct dir *dir = dir_open_root ();
+    struct inode *inode = NULL;
+
+    if (dir != NULL)
+        dir_lookup (dir, token, &inode);
+    dir_close (dir);
+
+    if (inode == NULL) {
+        return TID_ERROR;
+    }
+
+    /* TODO: look for the opened file list, if there exists, acquire the lock for the inode */
 
     tid_t tid = process_execute(cmd_line);
+
+    if (tid != -1) {    /* lock the executable for concurrent write */
+        struct opened_file *opened = malloc(sizeof *opened);
+        opened->inode = inode;
+        lock_init(&opened->lock);
+        list_push_back(&opened_files, &opened->elem);
+    }
 
     return tid;
 }
@@ -143,6 +187,7 @@ int __sys_wait(uint32_t *esp){
     int child_exit_status = process_wait(child_pid);
     return child_exit_status;
 }
+
 /**
    Creates new file called file initially initial_size bytes in size.
     returns true if successful, false otherwise.
@@ -171,6 +216,7 @@ bool    __sys_remove(uint32_t *esp){
     if (!is_valid_user_addr(esp))
         sys_exit_internal(-1);
     char *file = (char *)(*esp++);
+    /* TODO: Remove the lock for the file */
     return filesys_remove(file);
 }
 
@@ -193,8 +239,13 @@ int     __sys_open(uint32_t *esp) {
             t->fdtable[fd] = filesys_open(file);
             if(t->fdtable[fd] == NULL)
                 return -1;
-            else
+            else {           /** TODO: add the opened_file here (no acquire lock) */
+                struct opened_file *opened = malloc(sizeof *opened);
+                opened->inode = t->fdtable[fd]->inode;
+                lock_init(&opened->lock);
+                list_push_back(&opened_files, &opened->elem);
                 return fd;
+            }
         }
     }
     return -1;
@@ -251,15 +302,27 @@ int     __sys_read(uint32_t *esp){
         struct thread *t = thread_current();
         if(t->fdtable[fd] == NULL ){
             return -1;
-        } else{
-            //buffer = palloc_get_page (0);
-            //printf("\n\n\nbuffer content: %s, addr: %x, size: %d\n\n\n", buffer, &buffer, strlen(buffer));
-            //file_deny_write(t->fdtable[fd]);
+        } else{ /** TODO: acquire the lock here and release before return */
+            struct opened_file *opened = NULL;
+            struct list_elem *e;
+            for (e = list_begin (&opened_files); e != list_end (&opened_files);
+               e = list_next (e))
+            {
+              opened = list_entry (e, struct opened_file, elem);
+              if ((uint32_t)inode_get_inumber(opened->inode) == (uint32_t)inode_get_inumber(t->fdtable[fd]->inode) )
+                break;
+              opened = NULL;
+            }
+            if (opened != NULL) {
+                lock_acquire(&opened->lock);
+            }
             int bytes_read = file_read(t->fdtable[fd], buffer, (off_t)size);
 //            if (strlen(buffer) > bytes_read) { /*kind of hack.. but it has to be done to make sure buffer does not contain bogus value in the end*/
 //                buffer[bytes_read] = '\0';
 //            }
             //printf("\nbytes_read:%d\nbuffer: %s\n buffersize: %d\n", bytes_read, buffer, strlen(buffer));
+            if (opened != NULL)
+                lock_release(&opened->lock);
             return bytes_read;
         }
     }
@@ -291,8 +354,11 @@ int __sys_write(uint32_t *esp) {
         struct thread *t = thread_current();
         if (t->fdtable[fd] == NULL )
             return -1;
-        else
-            return file_write(t->fdtable[fd],buffer,size);
+        else {  /** TODO: acquire the lock here, release before return */
+            int bytes_written = file_write(t->fdtable[fd],buffer,size);
+            //printf("\n\nbytes_written: %d and buffers size: %d and claimed size: %d", bytes_written, strlen(buffer), size);
+            return bytes_written;
+        }
     }else {                     /// should not get here
         return -1;
     }
@@ -338,4 +404,5 @@ void    __sys_close(uint32_t *esp){
     //printf("\n\n %d \n\n", fd);
     file_close(t->fdtable[fd]);
     t->fdtable[fd] = NULL;
+    /**TODO: remove the opened file from the list */
 }

@@ -39,29 +39,6 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-    char *temp;
-    temp = palloc_get_page (0);
-    strlcpy(temp, file_name, PGSIZE);
-    char *save_ptr;
-    char *token = strtok_r(temp, " ", &save_ptr);
-//    struct file *executed_file = filesys_open(token);
-//    if (executed_file == NULL)
-//        return TID_ERROR;
-//    else
-//        file_close(executed_file);
-
-//    printf("\n\n\n\ntoken: %s\n\n\n", token);
-    struct dir *dir = dir_open_root ();
-    struct inode *inode = NULL;
-
-    if (dir != NULL)
-        dir_lookup (dir, token, &inode);
-    dir_close (dir);
-
-    if (inode == NULL) {
-        return TID_ERROR;
-    }
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) {
@@ -113,14 +90,6 @@ start_process (void *file_name_)
     cur->executed_file = executed_file;
     if (executed_file != NULL) {
         file_deny_write(executed_file);
-    }else {
-        //cur->tid = TID_ERROR;
-        /*
-        char *save_ptr;
-        char *name = strtok_r(thread_name(), " ", &save_ptr);
-        printf("%s: exit(%d)\n", name, -1);
-        cur->exit_status = -1;
-        thread_exit();*/
     }
 
   /* Initialize interrupt frame and load executable. */
@@ -380,6 +349,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+    //file_deny_write(file); ///Write protection
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
