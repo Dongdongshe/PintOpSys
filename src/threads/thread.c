@@ -473,6 +473,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 #ifdef USERPROG
     list_init(&t->children);
+    sema_init(&t->exec_sem, 0);
     int i;  /* init fdtable */
     for(i=0; i < 128; i++)
         t->fdtable[i] = NULL;

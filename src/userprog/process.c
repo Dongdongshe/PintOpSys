@@ -40,11 +40,15 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
+  struct thread *parent = thread_current();
+
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR) {
+  sema_down(&parent->exec_sem);
+  if (tid == TID_ERROR || parent->just_created_child->exit_status == TID_ERROR) {
     palloc_free_page (fn_copy);
+    return TID_ERROR;
   }else {
-    struct thread *parent = thread_current();
+
     struct child_proc *child;
     child = palloc_get_page (PAL_ZERO);
     child->exit_status = 0;
@@ -86,10 +90,15 @@ start_process (void *file_name_)
     }
     /*write protection*/
     struct thread *cur = thread_current();
+    cur->parent_thread->just_created_child = cur;
     struct file *executed_file = filesys_open(file_name);
     cur->executed_file = executed_file;
     if (executed_file != NULL) {
         file_deny_write(executed_file);
+    }else {
+        cur->exit_status = TID_ERROR;
+        sema_up(&cur->parent_thread->exec_sem);
+        thread_exit ();
     }
 
   /* Initialize interrupt frame and load executable. */
@@ -126,11 +135,17 @@ start_process (void *file_name_)
     *(int *)if_.esp = 0;        /* push dummy return addr. */
         ////
 
+
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success) {
+      cur->exit_status = TID_ERROR;
+      sema_up(&cur->parent_thread->exec_sem);
     thread_exit ();
-
+  }else {
+    sema_up(&cur->parent_thread->exec_sem);
+  }
 
 
 
@@ -226,7 +241,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-    file_close (cur->executed_file);
+    if (cur->executed_file != NULL)
+        file_close (cur->executed_file);
+    cur->executed_file = NULL;
 
     int i;
     for(i=2;i<128;i++) {
@@ -347,6 +364,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
+      t->exit_status = TID_ERROR;
       goto done;
     }
     //file_deny_write(file); ///Write protection
@@ -361,6 +379,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phnum > 1024)
     {
       printf ("load: %s: error loading executable\n", file_name);
+      t->exit_status = TID_ERROR;
       goto done;
     }
 

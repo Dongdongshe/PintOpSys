@@ -112,6 +112,7 @@ struct thread
     ///int64_t waketime;
 
     struct file *fdtable[128];          /* file descriptors */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -123,6 +124,7 @@ struct thread
     //struct condition waitCV;            /* conditional variable to be used with waitLock*/
     struct file *executed_file;          /* keep track of file executed */
     struct thread *just_created_child;
+    struct semaphore exec_sem;           /* init with 0 */
 #endif
 
     /* Owned by thread.c. */
