@@ -119,13 +119,11 @@ start_process (void *file_name_)
     esp_frame = if_.esp - word_align - 4 * (argc + 1);      /* frame points to the bottom */
 
     for( token = strtok_r(command_line, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
-
           strlcpy((char *)if_.esp, token, strlen(token)+1);                         /* push arg token */
           *(unsigned int *)(esp_frame + (4 * num_arg)) = (unsigned int)if_.esp;     /* push the address of arg just pushed */
           num_arg++;                                                                /* increment num_arg */
           if_.esp = if_.esp + strlen(token) + 1;
           *(char *)if_.esp = '\0';
-
     }
 
     if_.esp = esp_frame - 4;    /* push char** argv */
@@ -135,7 +133,7 @@ start_process (void *file_name_)
     if_.esp = esp_frame - 12;
     *(int *)if_.esp = 0;        /* push dummy return addr. */
         ////
-
+    palloc_free_page(command_line);
 
 
   /* If load failed, quit. */
@@ -198,7 +196,10 @@ process_wait (tid_t child_tid UNUSED)
         cond_wait(&child->waitCV, &child->waitLock);
     }
     lock_release(&child->waitLock);
-    return child->exit_status;          /**How do i determine exit status?*/
+    list_remove(&child->elem);
+    int exit_status = child->exit_status;
+    palloc_free_page(child);
+    return exit_status;          /**How do i determine exit status?*/
 }
 
 /* Free the current process's resources. */

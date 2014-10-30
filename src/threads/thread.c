@@ -552,6 +552,12 @@ thread_schedule_tail (struct thread *prev)
      palloc().) */
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread)
     {
+//        *prev->fdtable = NULL;
+//        prev->children = NULL;
+//        prev->parent_thread = NULL;
+//        prev->executed_file = NULL;
+//        prev->just_created_child = NULL;
+//        prev->exec_sem = NULL;
       ASSERT (prev != cur);
       if (prev->pagedir != NULL)        /* DESTROY and free up the resources for user prog*/
         pagedir_destroy(prev->pagedir);
