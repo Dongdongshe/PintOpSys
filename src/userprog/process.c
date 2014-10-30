@@ -44,7 +44,7 @@ process_execute (const char *file_name)
 
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   sema_down(&parent->exec_sem);
-  if (tid == TID_ERROR || parent->just_created_child->exit_status == TID_ERROR) {
+  if (tid == TID_ERROR || parent->just_created_child == NULL) {
     palloc_free_page (fn_copy);
     return TID_ERROR;
   }else {
@@ -71,6 +71,9 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+    struct thread *cur = thread_current();
+    cur->parent_thread->just_created_child = cur;
+
     /**arg pass*/
 
     char S[] = "";
@@ -89,14 +92,12 @@ start_process (void *file_name_)
         argc++;
     }
     /*write protection*/
-    struct thread *cur = thread_current();
-    cur->parent_thread->just_created_child = cur;
+
     struct file *executed_file = filesys_open(file_name);
     cur->executed_file = executed_file;
     if (executed_file != NULL) {
         file_deny_write(executed_file);
     }else {
-        cur->exit_status = TID_ERROR;
         sema_up(&cur->parent_thread->exec_sem);
         thread_exit ();
     }
@@ -207,24 +208,30 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-    struct list_elem *e;
-    struct child_proc *child;
-    struct thread *parent = cur->parent_thread;
-    if (!list_empty(&parent->children)) {
-        for (e = list_begin (&parent->children); e != list_end (&parent->children); e = list_next (e)) {
-            child = list_entry (e, struct child_proc, elem);
-            if (cur->tid == child->child_tid) {
-                break;  /* Identify current child from parent */
+    if (cur->executed_file != NULL) {
+    /* only if child executed file before */
+        struct list_elem *e;
+        struct child_proc *child;
+        struct thread *parent = cur->parent_thread;
+        if (!list_empty(&parent->children)) {
+            for (e = list_begin (&parent->children); e != list_end (&parent->children); e = list_next (e)) {
+                child = list_entry (e, struct child_proc, elem);
+                if (cur->tid == child->child_tid) {
+                    break;  /* Identify current child from parent */
+                }
             }
         }
-    }
 
-    lock_acquire(&child->waitLock);
-    //cur->exit_status = 0;
-    child->exit_status = cur->exit_status;
-    child->isFinished = true;
-    cond_signal(&child->waitCV, &child->waitLock);
-    lock_release(&child->waitLock);
+        lock_acquire(&child->waitLock);
+        //cur->exit_status = 0;
+        child->exit_status = cur->exit_status;
+        child->isFinished = true;
+        cond_signal(&child->waitCV, &child->waitLock);
+        lock_release(&child->waitLock);
+    }else {
+        /*the child never executed file, then called exit, meaning it is exiting in error*/
+        cur->parent_thread->just_created_child = NULL;
+    }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
