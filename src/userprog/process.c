@@ -210,6 +210,16 @@ process_exit (void)
 
     if (cur->executed_file != NULL) {
     /* only if child executed file before */
+
+    file_close (cur->executed_file);
+    cur->executed_file = NULL;
+    int i;
+    for(i=2;i<128;i++) {
+        if(cur->fdtable[i]!=NULL){
+            file_close(cur->fdtable[i]);
+            cur->fdtable[i] == NULL;
+        }
+    }
         struct list_elem *e;
         struct child_proc *child;
         struct thread *parent = cur->parent_thread;
@@ -230,7 +240,8 @@ process_exit (void)
         lock_release(&child->waitLock);
     }else {
         /*the child never executed file, then called exit, meaning it is exiting in error*/
-        cur->parent_thread->just_created_child = NULL;
+        if (cur->parent_thread != NULL)
+            cur->parent_thread->just_created_child = NULL;
     }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -248,17 +259,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-    if (cur->executed_file != NULL)
-        file_close (cur->executed_file);
-    cur->executed_file = NULL;
 
-    int i;
-    for(i=2;i<128;i++) {
-        if(cur->fdtable[i]!=NULL){
-            file_close(cur->fdtable[i]);
-            cur->fdtable[i] == NULL;
-        }
-    }
 }
 
 /* Sets up the CPU for running user code in the current
