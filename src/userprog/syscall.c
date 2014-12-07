@@ -25,9 +25,6 @@ struct file
 
 static void syscall_handler (struct intr_frame *);
 
-
-static struct lock file_lock;
-
 void
 syscall_init (void)
 {

@@ -33,14 +33,18 @@ struct spage_entry {
 void spage_table_init (struct hash *spt);
 void spage_table_destroy (struct hash *spt);
 
+struct spage_entry* spage_getEntry (void *user_va);
+bool spage_grow_stack (void *user_va);
+
 bool spage_load_page (struct spage_entry *spte);
 bool spage_load_mmap (struct spage_entry *spte);
 bool spage_load_swap (struct spage_entry *spte);
 bool spage_load_file (struct spage_entry *spte);
+
 bool spage_add_file (struct file *file, int32_t ofs, uint8_t *upage,
-			     uint32_t read_bytes, uint32_t zero_bytes,
-			     bool writable);
+                        uint32_t read_bytes, uint32_t zero_bytes,
+                        bool writable);
 bool spage_add_mmap (struct file *file, int32_t ofs, uint8_t *upage,
-			    uint32_t read_bytes, uint32_t zero_bytes);
-bool spage_grow_stack (void *user_va);
-struct spage_entry* spage_getEntry (void *user_va);
+                        uint32_t read_bytes, uint32_t zero_bytes);
+
+

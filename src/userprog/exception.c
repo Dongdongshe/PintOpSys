@@ -164,18 +164,25 @@ page_fault (struct intr_frame *f)
      */
      bool is_loaded = false;
      if( is_user_vaddr(fault_addr) && not_present) {
+//         printf("\n\n\tgetting the entry\n\n");
         struct spage_entry *spte = spage_getEntry(fault_addr);
+//        printf("\n\n\tGot the entry\n\tfault:%p entry:%p\n", fault_addr, spte->user_va);
         if (spte != NULL) {
+//            printf("\n\n\tload the page\n\n");
             /* page entry is in the table , load the page*/
             is_loaded = spage_load_page(spte);
+//            printf("\n\nLOADING PAGE SUCCESS\n\n");
             spte->is_pinned = false;
+        }else {
+//            printf("\n\n\tentry is empty, check grow \n\n");
+            /* the user virtual address is not in the supplemental page table */
+            if(fault_addr >= (f->esp - 32)) {
+                /*chek if it is requesting more stack */
+                is_loaded = spage_grow_stack(fault_addr);
+            }
         }
-        /*
-        else if (fault_addr >= f->esp - STACK_HEURISTIC) {
-            is_load = grow_stack(fault_addr);
-        }*/
      }
-
+    //printf("\n\n\n\t PRETTY SURE NOT GETTING HERE \n\n");
     if (!is_loaded) {
         printf ("Page fault at %p: %s error %s page in %s context.\n",
             fault_addr,

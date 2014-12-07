@@ -19,6 +19,7 @@ void frame_table_init (void)
 }
 
 void* frame_alloc(enum palloc_flags flag, struct spage_entry *spte) {
+    if (flag & PAL_USER == 0) return NULL;
     void *frame = palloc_get_page (flag);
     if (frame == NULL) {
         /*No more frame available, evict required*/
@@ -32,6 +33,7 @@ bool frame_add(void *frame, struct spage_entry *spte) {
     struct frame_table_entry *fte = malloc(sizeof (struct frame_table_entry));
     fte->frame = frame;
     fte->t = thread_current();
+//    printf("\n\n\nFAIL\n\n\n");
     fte->spte = spte;
     lock_acquire(&frame_table_lock);
     list_push_back(&frame_table, &fte->elem);
@@ -44,7 +46,7 @@ void* frame_evict(enum palloc_flags flag){
 void frame_free(void *frame){
     struct list_elem *e;
     lock_acquire(&frame_table_lock);
-
+//    printf("\n\tbest guess\n");
     for (e = list_begin (&frame_table); e != list_end (&frame_table); e = list_next (e)) {
         struct frame_table_entry *fte = list_entry (e, struct frame_table_entry, elem);
         if (frame == fte->frame) {
@@ -54,6 +56,7 @@ void frame_free(void *frame){
             break;
         }
     }
+//    printf("\n\tbest guess wrong?\n\n");
 
     lock_release(&frame_table_lock);
 }

@@ -74,6 +74,9 @@ start_process (void *file_name_)
     struct thread *cur = thread_current();
     cur->parent_thread->just_created_child = cur;
 
+    /*initialize the supplemental page table*/
+    spage_table_init(&cur->spt);
+
     /**arg pass*/
 
     char S[] = "";
@@ -101,8 +104,7 @@ start_process (void *file_name_)
         sema_up(&cur->parent_thread->exec_sem);
         thread_exit ();
     }
-      /*initialize the supplemental page table*/
-    spage_table_init(&thread_current()->spt);
+
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -464,13 +466,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -552,29 +553,37 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 //      uint8_t *kpage = palloc_get_page (PAL_USER);
 //      if (kpage == NULL)
 //        return false;
-        uint8_t *kpage = frame_alloc(PAL_USER, NULL); /*NO PAGE ENTRY FOR NOW NEED TO FIX THIS*/
-        if (kpage == NULL) {
+//
+//
+//        uint8_t *kpage = frame_alloc(PAL_USER, NULL); /*NO PAGE ENTRY FOR NOW NEED TO FIX THIS*/
+//        if (kpage == NULL) {
+//            return false;
+//        }
+//
+//      /* Load this page. */
+//      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+//        {
+//          palloc_free_page (kpage);
+//          return false;
+//        }
+//      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+//
+//      /* Add the page to the process's address space. */
+//      if (!install_page (upage, kpage, writable))
+//        {
+//          palloc_free_page (kpage);
+//          return false;
+//        }
+//        printf("\n\t\tTAKE THIS FILE: %p", file);
+        /* Add file to the supplemental page table and return success */
+        if(!spage_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable))
             return false;
-        }
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false;
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable))
-        {
-          palloc_free_page (kpage);
-          return false;
-        }
+//        printf("\n\nadding file success\n\n");
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
+      ofs += page_read_bytes;
       upage += PGSIZE;
     }
   return true;
@@ -613,7 +622,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
