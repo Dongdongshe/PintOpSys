@@ -101,6 +101,8 @@ start_process (void *file_name_)
         sema_up(&cur->parent_thread->exec_sem);
         thread_exit ();
     }
+      /*initialize the supplemental page table*/
+    spage_table_init(&thread_current()->spt);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -547,9 +549,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
-        return false;
+//      uint8_t *kpage = palloc_get_page (PAL_USER);
+//      if (kpage == NULL)
+//        return false;
+        uint8_t *kpage = frame_alloc(PAL_USER, NULL); /*NO PAGE ENTRY FOR NOW NEED TO FIX THIS*/
+        if (kpage == NULL) {
+            return false;
+        }
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
@@ -582,7 +588,10 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+//  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+
+    kpage = frame_alloc(PAL_USER | PAL_ZERO); /* allocate frame */
+
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

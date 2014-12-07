@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include <hash.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -126,6 +127,10 @@ struct thread
     struct thread *just_created_child;
     struct semaphore exec_sem;           /* init with 0 */
 #endif
+
+    struct hash spt;                    /* supplemental page table */
+    struct list mmap_list;              /* mmap list */
+    int mapid;                          /* mapid for the thread */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

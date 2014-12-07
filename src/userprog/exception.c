@@ -5,6 +5,9 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#include "threads/vaddr.h"
+#include "vm/page.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -155,11 +158,34 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+     /**
+        If its not a user addr ( function in vaddr.h ), then kill the process.
+        If it is, then check for hash page and if its trying to grow stack. If neither of those, quit.
+     */
+     bool is_loaded = false;
+     if( is_user_vaddr(fault_addr) && not_present) {
+        struct spage_entry *spte = spage_getEntry(fault_addr);
+        if (spte != NULL) {
+            /* page entry is in the table , load the page*/
+            is_loaded = spage_load_page(spte);
+            spte->is_pinned = false;
+        }
+        /*
+        else if (fault_addr >= f->esp - STACK_HEURISTIC) {
+            is_load = grow_stack(fault_addr);
+        }*/
+     }
+
+    if (!is_loaded) {
+        printf ("Page fault at %p: %s error %s page in %s context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
+        kill (f);
+
+    }
+
+
 }
 
