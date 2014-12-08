@@ -227,21 +227,19 @@ bool spage_add_mmap(struct file *file, int32_t ofs, uint8_t *upage,
 }
 
 /* given the user virtual addreess, grow the stack, returns true if success */
-bool spage_grow_stack (void *user_va)
-{
-if ( (size_t) (PHYS_BASE - pg_round_down(user_va)) > MAX_STACK_SIZE)
-{
-  return false;
-}/* FIGURE THIS OUT */
+bool spage_grow_stack (void *user_va) {
+    if ( ((size_t) (PHYS_BASE - pg_round_down(user_va))) > MAX_STACK)
+        return false;   /* cannot grow any more */
+
     struct spage_entry *spte = malloc(sizeof(struct spage_entry));
     if (spte == NULL)
         return false;
 
-    spte->user_va = pg_round_down(user_va);
+    spte->is_pinned = true;            // need to be pinned so that stack doesn't get evicted?
     spte->is_loaded = true;
     spte->writable = true;
+    spte->user_va = pg_round_down(user_va);
     spte->spage_type = SPAGE_SWAP;          // swap should be right
-    spte->is_pinned = true;            // need to be pinned so that stack doesn't get evicted?
 
     uint8_t *frame = frame_alloc (PAL_USER, spte);
     if (frame == NULL) {    /* no frame is available */
@@ -249,17 +247,15 @@ if ( (size_t) (PHYS_BASE - pg_round_down(user_va)) > MAX_STACK_SIZE)
         return false;
     }
 
-//  if (!install_page(spte->user_va, frame, spte->writable))
-//    {
-//      free(spte);
-//      frame_free(frame);
-//      return false;
-//    }
-//
-//  if (intr_context())
-//    {
-//      spte->is_pinned = false;
-//    }
+    if (!install_page(spte->user_va, frame, spte->writable)) {
+        free(spte);
+        frame_free(frame);
+        return false;
+    }
+
+    if (intr_context()) {
+        spte->is_pinned = false;
+    }
 
     /* insert the spage entry into supplemental page table */
     struct hash_elem *e = hash_insert(&thread_current()->spt, &spte->elem);

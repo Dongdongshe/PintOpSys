@@ -1,9 +1,6 @@
 #include "lib/kernel/hash.h"
 
-
-// 256 KB
-#define MAX_STACK_SIZE (1 << 23)
-
+#define MAX_STACK (1 << 23)
 
 #define SPAGE_FILE 0
 #define SPAGE_SWAP 1

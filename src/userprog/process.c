@@ -248,6 +248,10 @@ process_exit (void)
         if (cur->parent_thread != NULL)
             cur->parent_thread->just_created_child = NULL;
     }
+
+    /**destroy supplemental pages*/
+    spage_table_destroy(&cur->spt);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -594,22 +598,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp)
 {
-  uint8_t *kpage;
-  bool success = false;
-
+  //uint8_t *kpage;
+    bool success = false;
+    success = spage_grow_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
 //  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+    if (success) *esp = PHYS_BASE;
 
-    kpage = frame_alloc(PAL_USER | PAL_ZERO); /* allocate frame */
-
-  if (kpage != NULL)
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-        *esp = PHYS_BASE;
-      }
-      else
-        palloc_free_page (kpage);
-    }
+/**moving to spage*/
+//    kpage = frame_alloc(PAL_USER | PAL_ZERO); /* allocate frame */
+//
+//  if (kpage != NULL)
+//    {
+//      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+//      if (success) {
+//        *esp = PHYS_BASE;
+//      }
+//      else
+//        palloc_free_page (kpage);
+//    }
   return success;
 }
 

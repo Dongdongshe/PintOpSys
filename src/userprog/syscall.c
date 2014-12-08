@@ -288,7 +288,10 @@ int     __sys_read(uint32_t *esp){
         struct thread *t = thread_current();
         if(t->fdtable[fd] == NULL ){
             return -1;
-        } else{
+        } else if(t->fdtable[fd] == t->executed_file){
+            /* trying to modify the code file */
+            return -1;
+        }else{
 
             lock_acquire(&file_lock);
             //printf("\n\t%d: lock acquired in read\n", thread_tid());
