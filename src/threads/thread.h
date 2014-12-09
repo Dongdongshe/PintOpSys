@@ -38,6 +38,12 @@ struct child_proc {
     struct condition waitCV;            /* conditional variable to be used with waitLock*/
     bool canWait;                       /* record of parent waiting */
 };
+//
+//struct mmap_file {
+//    struct spage_entry *spte;
+//    int mapid;                          /* file descriptor for mmap */
+//    struct list_elem elem;
+//}
 
 /* A kernel thread or user process.
 
@@ -129,8 +135,7 @@ struct thread
 #endif
 
     struct hash spt;                    /* supplemental page table */
-    struct list mmap_list;              /* mmap list */
-    int mapid;                          /* mapid for the thread */
+    struct spage_entry *mmaptable[128]; /* mmap descriptors*/
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -91,21 +91,6 @@ bool spage_load_page (struct spage_entry *spte) {
     return success;
 }
 
-/* load swap page */
-bool spage_load_swap (struct spage_entry *spte) {
-    uint8_t *frame = frame_alloc (PAL_USER, spte);
-    if (frame == NULL)     /* No frame available */
-        return false;
-
-//    if (!install_page(spte->user_va, frame, spte->writable)) {
-//      frame_free(frame);
-//      return false;
-//    }
-//    swap_in(spte->swap_index, spte->user_va);
-//    spte->is_loaded = true;
-    return true;
-}
-
 bool spage_load_file (struct spage_entry *spte) {
     enum palloc_flags flags = PAL_USER;
     if ( spte->read_bytes == 0 ) {
@@ -193,37 +178,51 @@ bool spage_add_file (struct file *file, int32_t ofs, uint8_t *upage,
     return e == NULL;   // NULL is success
 }
 
-/*  */
+/* load swap page */
+bool spage_load_swap (struct spage_entry *spte) {
+    uint8_t *frame = frame_alloc (PAL_USER, spte);
+    if (frame == NULL)     /* No frame available */
+        return false;
+
+    if (!install_page(spte->user_va, frame, spte->writable)) {
+        frame_free(frame);
+        return false;
+    }
+    swap_in(spte->swap_index, spte->user_va);
+    spte->is_loaded = true;
+    return true;
+}
+
+
+/* Add mmap file into the mmap page structure, use mmapfd  */
 bool spage_add_mmap(struct file *file, int32_t ofs, uint8_t *upage,
-			     uint32_t read_bytes, uint32_t zero_bytes)
-{
-//  struct spage_entry *spte = malloc(sizeof(struct spage_entry));
-//  if (!spte)
-//    {
-//      return false;
-//    }
-//  spte->file = file;
-//  spte->offset = ofs;
-//  spte->user_va = upage;
-//  spte->read_bytes = read_bytes;
-//  spte->zero_bytes = zero_bytes;
-//  spte->is_loaded = false;
-//  spte->page_type = MMAP;
-//  spte->writable = true;
-//  spte->is_pinned = false;
-//
-//  if (!process_add_mmap(spte))
-//    {
-//      free(spte);
-//      return false;
-//    }
-//
-//  if (hash_insert(&thread_current()->spt, &spte->elem))
-//    {
-//      spte->spage_type = HASH_ERROR;
-//      return false;
-//    }
-  return true;
+			     uint32_t read_bytes, uint32_t zero_bytes, int mmapfd) {
+
+    struct spage_entry *spte = malloc(sizeof(struct spage_entry));
+    if (spte == NULL ) return false;
+    /* Assign the file paramter values */
+    spte->file          = file;
+    spte->offset        = ofs;
+    spte->user_va       = upage;
+    spte->read_bytes    = read_bytes;
+    spte->zero_bytes    = zero_bytes;
+    spte->writable      = true;
+    /* initialize the spage_entry structure */
+    spte->spage_type    = SPAGE_MMAP;
+    spte->is_loaded     = false;
+    spte->is_pinned     = false;
+
+    struct thread *t = thread_current();
+    if (t->mmaptable[mmapfd] != NULL)  {
+        free(spte);
+        return false;
+    }
+
+    if (hash_insert(&t->spt, &spte->elem)) {
+        spte->spage_type = SPAGE_HASH_ERROR;
+        return false;
+    }
+    return true;
 }
 
 /* given the user virtual addreess, grow the stack, returns true if success */
