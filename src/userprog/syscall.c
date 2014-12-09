@@ -16,6 +16,9 @@
 #include "threads/malloc.h"
 #include "filesys/inode.h"
 
+#include "vm/page.h"
+#include "vm/frame.h"
+
 struct file
   {
     struct inode *inode;        /* File's inode. */
@@ -90,8 +93,8 @@ syscall_handler (struct intr_frame *f UNUSED)
         case SYS_TELL           : f->eax = __sys_tell(esp); break;
         case SYS_CLOSE          : __sys_close(esp); break;
         /* Below, Project3 and later*/
-        case SYS_MMAP           : break;
-        case SYS_MUNMAP         : break;
+        case SYS_MMAP           : f->eax = __sys_mmap(esp); break;
+        case SYS_MUNMAP         : __sys_munmap(esp); break;
 
         case SYS_CHDIR          : break;
         case SYS_MKDIR          : break;
@@ -392,4 +395,86 @@ void    __sys_close(uint32_t *esp){
     file_close(t->fdtable[fd]);
     lock_release(&file_lock);
     t->fdtable[fd] = NULL;
+}
+
+int __sys_mmap (uint32_t *esp) {
+    if(!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int fd = (int)*(esp++);
+    if(!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    void *addr = *(esp++);
+
+    struct thread *t = thread_current();
+    struct file *old_file = t->fdtable[fd];
+
+    if(old_file == NULL || (uint32_t) addr % PGSIZE != 0)
+        return -1;
+
+    struct file *f = file_reopen(old_file);
+    if (f == NULL || file_length(old_file) == 0)
+        return -1;
+
+    int mmapfd;
+    for(mmapfd = 0; mmapfd < 128; mmapfd++){    /* 128 is pintos-doc specified limit */
+        if(t->mmaptable[mmapfd] == NULL){
+            break;
+        }else if( mmapfd == 128) {
+            return -1;  // FULL
+        }
+    }
+
+    int32_t offset = 0;
+    uint32_t read_bytes = file_length(f);
+    while (read_bytes > 0) {
+        uint32_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        uint32_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+        if (!spage_add_mmap(f, offset, addr, page_read_bytes, page_zero_bytes, mmapfd)) {
+            // TODO: remove spage entry for the mmap here
+            return -1;
+        }
+        /* Advance */
+        read_bytes -= page_read_bytes;
+        offset += page_read_bytes;
+        addr += PGSIZE;
+    }
+    return mmapfd;
+
+}
+
+void __sys_munmap (uint32_t *esp)  {
+    if(!is_valid_user_addr(esp))
+        sys_exit_internal(-1);
+    int mmapfd = (int)*(esp++);
+    //process_remove_mmap(mmapfd);
+
+    struct thread *t = thread_current();
+
+    struct spage_entry *spte = t->mmaptable[mmapfd];
+    /* nothing to remove or not MMAP page*/
+    if (spte == NULL || spte->spage_type != SPAGE_MMAP)
+        return;
+    spte->is_pinned = true;
+    if(spte->is_loaded) {
+        if (pagedir_is_dirty(t->pagedir, spte->user_va)) {
+            /* write the file out*/
+            lock_acquire(&file_lock);
+            file_write_at(spte->file, spte->user_va, spte->read_bytes, spte->offset);
+            lock_release(&file_lock);
+        }
+        frame_free(pagedir_get_page(t->pagedir, spte->user_va));
+        pagedir_clear_page(t->pagedir, spte->user_va);
+    }
+    if (spte->spage_type != SPAGE_HASH_ERROR) {
+        hash_delete(&t->spt, &spte->elem);
+    }
+
+    if (spte->file != NULL) {
+        lock_acquire(&file_lock);
+        file_close(spte->file);
+        lock_release(&file_lock);
+    }
+    free(spte);
+
 }

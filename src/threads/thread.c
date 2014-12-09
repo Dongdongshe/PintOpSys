@@ -478,6 +478,9 @@ init_thread (struct thread *t, const char *name, int priority)
     for(i=0; i < 128; i++)
         t->fdtable[i] = NULL;
 #endif
+    int j;
+    for (j=0; j< 128; j++)
+        t->mmaptable[j] = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
