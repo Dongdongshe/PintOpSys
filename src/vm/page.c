@@ -85,7 +85,7 @@ bool spage_load_page (struct spage_entry *spte) {
     switch (spte->spage_type) { /* determine which page it is */
         case SPAGE_FILE: success = spage_load_file(spte); break;
         case SPAGE_SWAP: success = spage_load_swap(spte); break;
-        case SPAGE_MMAP: break;//success = spage_load_mmap(spte); break;
+        case SPAGE_MMAP: success = spage_load_file(spte); break;//success = spage_load_mmap(spte); break;
         default: break;
     }
     return success;
