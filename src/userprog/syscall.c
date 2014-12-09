@@ -480,5 +480,6 @@ void __sys_munmap (uint32_t *esp)  {
         lock_release(&file_lock);
     }
     free(spte);
+    t->mmaptable[mmapfd] = NULL;
 
 }

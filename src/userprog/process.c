@@ -269,8 +269,6 @@ process_exit (void)
                     file_write_at(spte->file, spte->user_va, spte->read_bytes, spte->offset);
                     //lock_release(&file_lock);
                 }
-                frame_free(pagedir_get_page(cur->pagedir, spte->user_va));
-                pagedir_clear_page(cur->pagedir, spte->user_va);
             }
         }
 
@@ -283,6 +281,8 @@ process_exit (void)
             file_close(spte->file);
             //lock_release(&file_lock);
         }
+        frame_free(pagedir_get_page(cur->pagedir, spte->user_va));
+        pagedir_clear_page(cur->pagedir, spte->user_va);
         free(spte);
         cur->mmaptable[j] = NULL;
     }
