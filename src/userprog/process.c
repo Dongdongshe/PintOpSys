@@ -19,6 +19,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "vm/frame.h"
+#include "vm/page.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -247,6 +250,41 @@ process_exit (void)
         /*the child never executed file, then called exit, meaning it is exiting in error*/
         if (cur->parent_thread != NULL)
             cur->parent_thread->just_created_child = NULL;
+    }
+    /**Destroy mmap table*/
+    int j;
+    for (j =0; j <128 ; j ++ ) {
+        struct spage_entry *spte = cur->mmaptable[j];
+        /* nothing to remove or not MMAP page*/
+        if (spte == NULL || spte->spage_type != SPAGE_MMAP) {
+            free(spte);
+            cur->mmaptable[j] = NULL;
+            continue;
+        }else {
+            spte->is_pinned = true;
+            if(spte->is_loaded) {
+                if (pagedir_is_dirty(cur->pagedir, spte->user_va)) {
+                    /* write the file out*/
+                    //lock_acquire(&file_lock);
+                    file_write_at(spte->file, spte->user_va, spte->read_bytes, spte->offset);
+                    //lock_release(&file_lock);
+                }
+                frame_free(pagedir_get_page(cur->pagedir, spte->user_va));
+                pagedir_clear_page(cur->pagedir, spte->user_va);
+            }
+        }
+
+        if (spte->spage_type != SPAGE_HASH_ERROR) {
+            hash_delete(&cur->spt, &spte->elem);
+        }
+
+        if (spte->file != NULL) {
+            //lock_acquire(&file_lock);
+            file_close(spte->file);
+            //lock_release(&file_lock);
+        }
+        free(spte);
+        cur->mmaptable[j] = NULL;
     }
 
     /**destroy supplemental pages*/

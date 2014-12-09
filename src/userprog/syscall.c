@@ -405,6 +405,10 @@ int __sys_mmap (uint32_t *esp) {
         sys_exit_internal(-1);
     void *addr = *(esp++);
 
+    if (addr == NULL)
+        return -1;
+        //sys_exit_internal(-1);
+
     struct thread *t = thread_current();
     struct file *old_file = t->fdtable[fd];
 
